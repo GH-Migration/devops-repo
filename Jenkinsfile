@@ -14,9 +14,6 @@ pipeline {
         // SONAR_TOKEN = credentials('sonarcloud-token')
     }
     stages {
-        stage("Cleanup Workspace") {
-            steps { cleanWs() }
-        }
         stage('Verify Environment') {
             steps {
                 sh 'java -version'
@@ -62,6 +59,9 @@ pipeline {
                     sh "docker rm -f test-app || true"
                 }
             }
+        }
+        stage("Cleanup Workspace") {
+            steps { cleanWs() }
         }
     }
 }
