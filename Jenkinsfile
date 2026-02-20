@@ -23,12 +23,6 @@ pipeline {
             }
         }
 
-        stage("Checkout from SCM") {
-            steps {
-                git branch: 'main', credentialsId: 'Org', url: 'https://github.com/Samarth-DevTools/register-app.git'
-            }
-        }
-
         stage('Verify Environment') {
             steps {
                 sh 'java -version'
