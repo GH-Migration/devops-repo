@@ -36,16 +36,27 @@ pipeline {
         stage("Build & Push Docker Image") {
             steps {
                 script {
-                    // Explicitly fetching username to avoid the "null string" validation error
+                    // This block securely retrieves your Docker Hub credentials
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
                         
-                        def fullImageName = "${DOCKER_USER}/${APP_NAME}"
+                        // Define the full image path
+                        def imagePath = "${DOCKER_USER}/${APP_NAME}"
+                        def fullImage = "${imagePath}:${IMAGE_TAG}"
                         
-                        docker.withRegistry('', 'dockerhub-creds') {
-                            def docker_image = docker.build("${fullImageName}:${IMAGE_TAG}")
-                            docker_image.push()
-                            docker_image.push("latest")
-                        }
+                        echo "Logging into Docker Hub..."
+                        sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
+                        
+                        echo "Building image: ${fullImage}"
+                        // The '.' tells Docker the Dockerfile is in the current root directory
+                        sh "docker build -t ${fullImage} ."
+                        
+                        echo "Tagging and Pushing..."
+                        sh "docker tag ${fullImage} ${imagePath}:latest"
+                        sh "docker push ${fullImage}"
+                        sh "docker push ${imagePath}:latest"
+                        
+                        echo "Cleaning up local login..."
+                        sh "docker logout"
                     }
                 }
             }
