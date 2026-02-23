@@ -1,0 +1,118 @@
+name: devops-pipeline1
+on:
+  workflow_dispatch:
+env:
+  APP_NAME: register-app-pipeline
+  RELEASE: 1.0.0
+#   # This item has no matching transformer
+#   IMAGE_TAG: '"${{ env.RELEASE }}-${{ github.run_id }}"'
+  SLACK_CHANNEL: "#test-notify"
+jobs:
+  Checkout_Clean:
+    name: Checkout & Clean
+    runs-on: ubuntu-latest
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: clean workspace
+      shell: bash
+      run: rm -rf ${{ github.workspace }}/*
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+#     # This item has no matching transformer
+#     - notify:
+#         isLiteral: false
+#         value: '"Started Build #${{ env.BUILD_NUMBER }}"'
+  Build_Test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    needs: Checkout_Clean
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+    - name: sh
+      shell: bash
+      run: mvn clean package
+#     # This item has no matching transformer
+#     - notify:
+#         isLiteral: true
+#         value: Maven Build & Test Successful
+  Build_Docker_Image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: Build_Test
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+#     # 'script' was not transformed because there is no suitable equivalent in GitHub Actions
+#     - name: script
+#       arguments:
+#       - key: scriptBlock
+#         value:
+#           isLiteral: true
+#           value: |-
+#             withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+#                                     sh "docker build -t ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} ."
+#                                     sh "docker tag ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:latest"
+#                                 }
+  Trivy_Security_Scan:
+    name: Trivy Security Scan
+    runs-on: ubuntu-latest
+    needs: Build_Docker_Image
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+#     # 'script' was not transformed because there is no suitable equivalent in GitHub Actions
+#     - name: script
+#       arguments:
+#       - key: scriptBlock
+#         value:
+#           isLiteral: true
+#           value: |-
+#             withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+#                                     sh "docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+#                                         aquasec/trivy image ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }} \
+#                                         --severity HIGH,CRITICAL --format table"
+#                                 }
+  Push_to_Docker_Hub:
+    name: Push to Docker Hub
+    runs-on: ubuntu-latest
+    needs: Trivy_Security_Scan
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4.1.0
+#     # 'script' was not transformed because there is no suitable equivalent in GitHub Actions
+#     - name: script
+#       arguments:
+#       - key: scriptBlock
+#         value:
+#           isLiteral: true
+#           value: "withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {\n                        // --- HERE IS THE LOGIN COMMAND ---\n                        sh \"echo \\$DOCKER_PASS | docker login -u \\$DOCKER_USER --password-stdin\"\n                        \n                        sh \"docker push ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:${{ env.IMAGE_TAG }}\"\n                        sh \"docker push ${{ env.DOCKER_USER }}/${{ env.APP_NAME }}:latest\"\n                        \n                        // Clean up session\n                        sh \"docker logout\"\n                    }"
+  Post-Build:
+    if: always()
+    name: Post Build
+    runs-on: ubuntu-latest
+    needs:
+    - Checkout_Clean
+    - Build_Test
+    - Build_Docker_Image
+    - Trivy_Security_Scan
+    - Push_to_Docker_Hub
+    steps:
+    - name: snapshot post build workflow status
+      run: |-
+        echo "success=${{ contains(needs.*.result,'success') && !contains(needs.*.result,'cancelled') && !contains(needs.*.result,'failure') }}" >> $GITHUB_OUTPUT
+        echo "failure=${{ contains(needs.*.result,'failure') && !contains(needs.*.result,'cancelled') }}" >> $GITHUB_OUTPUT
+      id: post_build
+    - uses: rtCamp/action-slack-notify@v2.2.1
+      env:
+        SLACK_WEBHOOK: "${{ secrets.SLACK_WEBHOOK }}"
+        SLACK_CHANNEL: '"${{ env.SLACK_CHANNEL }}"'
+        SLACK_MESSAGE: '"*BUILD FAILED*\n*Job:* ${{ env.JOB_NAME }}\n*Build:* #${{ env.BUILD_NUMBER }}\n*Logs:* ${{ env.BUILD_URL }}console"'
+      if: steps.post_build.outputs.failure == 'true'
+    - uses: rtCamp/action-slack-notify@v2.2.1
+      env:
+        SLACK_WEBHOOK: "${{ secrets.SLACK_WEBHOOK }}"
+        SLACK_CHANNEL: '"${{ env.SLACK_CHANNEL }}"'
+        SLACK_MESSAGE: '"*BUILD SUCCESSFUL*\n*Job:* ${{ env.JOB_NAME }}\n*Build:* #${{ env.BUILD_NUMBER }}\n*URL:* ${{ env.BUILD_URL }}"'
+      if: steps.post_build.outputs.success == 'true'
