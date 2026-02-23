@@ -99,6 +99,7 @@ pipeline {
         APP_NAME = "register-app-pipeline"
         RELEASE = "1.0.0"
         IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}"
+        // SLACK_CHANNEL = '#test-notify'
     }
 
     stages {
@@ -164,6 +165,17 @@ pipeline {
                 cleanWs()
                 notify("Pipeline Finished & Workspace Cleaned")
             }
+        }
+    }
+
+    post {
+        success {
+            slackSend(channel: "${SLACK_CHANNEL}", color: "good", 
+                message: "*BUILD SUCCESS* \nJob: ${env.JOB_NAME} \nBuild: #${env.BUILD_NUMBER} \nURL: ${env.BUILD_URL}")
+        }
+        failure {
+            slackSend(channel: "${SLACK_CHANNEL}", color: "danger", 
+                message: "*BUILD FAILED* \nJob: ${env.JOB_NAME} \nBuild: #${env.BUILD_NUMBER} \nLogs: ${env.BUILD_URL}")
         }
     }
 }
