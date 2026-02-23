@@ -3,6 +3,11 @@
 pipeline {
     agent any 
 
+    tools {
+        // This must match the Name you gave in Global Tool Configuration
+        maven 'Maven3' 
+    }
+
     environment {
         APP_NAME = "register-app-pipeline"
         RELEASE = "1.0.0"
