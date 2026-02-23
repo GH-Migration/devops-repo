@@ -85,15 +85,12 @@
 // }
 
 
-
-
+@Library('my-shared-library') _
 
 pipeline {
-    // 1. Use the specialized Maven-Docker Agent
     agent {
         docker {
-            image 'trion/maven-docker:3.9.6-jdk17'
-            // Mount the host socket so we can build images from within the container
+            image 'maven:3.9.6-eclipse-temurin-17'
             args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
         }
     }
@@ -107,16 +104,26 @@ pipeline {
     stages {
         stage('Verify Environment') {
             steps {
-                // Now all three commands will work perfectly
-                sh 'java -version'
-                sh 'mvn -version'
-                sh 'docker --version'
+                script {
+                    // Install Docker CLI inside the Maven container so the sh 'docker' commands work
+                    sh '''
+                        curl -fsSL https://get.docker.com -o get-docker.sh
+                        sh get-docker.sh
+                    '''
+                    sh 'java -version'
+                    sh 'mvn -version'
+                    sh 'docker --version'
+                    
+                    // Call shared library from vars/notify.groovy
+                    notify("Environment Verified") 
+                }
             }
         }
 
         stage("Build Application") {
             steps {
                 sh 'mvn clean package -DskipTests'
+                notify("Build Complete")
             }
         }
 
@@ -127,18 +134,12 @@ pipeline {
                         def imagePath = "${DOCKER_USER}/${APP_NAME}"
                         def fullImage = "${imagePath}:${IMAGE_TAG}"
                         
-                        echo "Logging into Docker Hub..."
                         sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
-                        
-                        echo "Building image: ${fullImage}"
                         sh "docker build -t ${fullImage} ."
-                        
-                        echo "Pushing image..."
-                        sh "docker tag ${fullImage} ${imagePath}:latest"
                         sh "docker push ${fullImage}"
-                        sh "docker push ${imagePath}:latest"
-                        
                         sh "docker logout"
+                        
+                        notify("Image Pushed to Docker Hub")
                     }
                 }
             }
@@ -148,7 +149,6 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', passwordVariable: 'UNUSED_PASS', usernameVariable: 'DOCKER_USER')]) {
-                        // Trivy runs as a separate container triggered by our agent
                         sh """
                             docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
                             aquasec/trivy image ${DOCKER_USER}/${APP_NAME}:${IMAGE_TAG} \
@@ -162,6 +162,7 @@ pipeline {
         stage("Cleanup Workspace") {
             steps {
                 cleanWs()
+                notify("Pipeline Finished & Workspace Cleaned")
             }
         }
     }
