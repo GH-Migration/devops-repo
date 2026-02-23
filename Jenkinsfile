@@ -3,8 +3,8 @@
 pipeline {
     agent {
         docker {
-            // This image comes pre-loaded with Maven, JDK 17, and Docker CLI
-            image 'trion/maven-docker:3.9.6-jdk17'
+            // Use the most stable official image
+            image 'maven:3.9.6-eclipse-temurin-17' 
             args '-v /var/run/docker.sock:/var/run/docker.sock -u root'
         }
     }
@@ -24,13 +24,12 @@ pipeline {
     stages {
         stage('Cleanup & Checkout') {
             steps {
-                deleteDir()
+                deleteDir() // Clean workspace as root to avoid permission errors
                 checkout scm
                 script {
-                    // Quick verification that tools are present
-                    sh 'mvn -version'
-                    sh 'docker --version'
-                    notify("Environment Ready")
+                    // Install only the CLI client, which is faster and more stable
+                    sh 'apt-get update && apt-get install -y docker.io'
+                    notify("Environment Ready") 
                 }
             }
         }
